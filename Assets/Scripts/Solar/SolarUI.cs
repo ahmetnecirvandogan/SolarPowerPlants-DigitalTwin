@@ -90,93 +90,78 @@ public class SolarUI : MonoBehaviour
     // UI
     // ========================================================================
 
+    // Use pixels (e.g. 240) or percentage (e.g. 55%) depending on your rect size
+    private const string ColPos = "<pos=150>"; 
+
     private void UpdateUI()
     {
         if (locationText != null)
         {
             locationText.text =
-                $"LOCATION\n" +
-                $"{rotateSun.Latitude:F2}°, " +
-                $"{rotateSun.Longitude:F2}°";
+                $"LOCATION\t\t" +
+                $"{rotateSun.Latitude:F2}°, {rotateSun.Longitude:F2}°";
         }
 
         if (elevationText != null)
         {
             elevationText.text =
-                $"SOLAR ELEVATION\n" +
+                $"SOLAR ELEVATION{ColPos}" +
                 $"{rotateSun.CurrentElevation:F1}°";
         }
 
         if (azimuthText != null)
         {
             azimuthText.text =
-                $"SOLAR AZIMUTH\n" +
+                $"SOLAR AZIMUTH{ColPos}" +
                 $"{rotateSun.CurrentAzimuth:F1}°";
         }
 
         if (statusText != null)
         {
             statusText.text =
-                $"STATUS\n" +
-                $"{(rotateSun.IsDaytime ? "DAYTIME" : "NIGHT")}";
+                $"STATUS{ColPos}" +
+                $"{(rotateSun.IsDaytime ? "DAY" : "NIGHT")}";
         }
 
         if (irradianceText != null)
         {
             irradianceText.text =
-                $"IRRADIANCE\n" +
+                $"IRRADIANCE{ColPos}" +
                 $"{raycastShading.CurrentIrradiance:F1} W/m²";
         }
 
         if (powerText != null)
         {
-            float power =
-                raycastShading.CurrentPower;
+            float power = raycastShading.CurrentPower;
+            string powerStr = power >= 1000f ? $"{power / 1000f:F2} kW" : $"{power:F1} W";
 
-            if (power >= 1000f)
-            {
-                powerText.text =
-                    $"CURRENT POWER\n" +
-                    $"{power / 1000f:F2} kW";
-            }
-            else
-            {
-                powerText.text =
-                    $"CURRENT POWER\n" +
-                    $"{power:F1} W";
-            }
+            powerText.text = $"CURRENT POWER{ColPos}{powerStr}";
         }
 
         if (efficiencyText != null)
         {
             efficiencyText.text =
-                $"PANEL EFFICIENCY\n" +
+                $"PANEL EFFICIENCY{ColPos}" +
                 $"{raycastShading.panelEfficiency * 100f:F1}%";
         }
 
         if (shadowText != null)
         {
             shadowText.text =
-                $"SHADOW\n" +
+                $"SHADOW{ColPos}" +
                 $"{(raycastShading.IsShaded ? "SHADED" : "CLEAR")}";
         }
 
         if (dailyEnergyText != null)
         {
-            if (accumulatedEnergyWh >= 1000f)
-            {
-                dailyEnergyText.text =
-                    $"TODAY'S ENERGY\n" +
-                    $"{accumulatedEnergyWh / 1000f:F2} kWh";
-            }
-            else
-            {
-                dailyEnergyText.text =
-                    $"TODAY'S ENERGY\n" +
-                    $"{accumulatedEnergyWh:F1} Wh";
-            }
+            string energyStr = accumulatedEnergyWh >= 1000f 
+                ? $"{accumulatedEnergyWh / 1000f:F2} kWh" 
+                : $"{accumulatedEnergyWh:F1} Wh";
+
+            dailyEnergyText.text = $"TODAY'S ENERGY{ColPos}{energyStr}";
         }
     }
+
 
     // ========================================================================
     // DAILY ENERGY
