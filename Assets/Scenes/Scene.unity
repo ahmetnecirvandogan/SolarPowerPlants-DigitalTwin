@@ -776,15 +776,15 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::RotateSun
   useSystemTime: 1
   timeScaleMultiplier: 1
-  simulatedHour: 10.336972
+  simulatedHour: 10.816504
   simulatedDayOfYear: 257
   latitude: 39.93
   longitude: 32.86
   northOffset: 0
   adjustIntensityForNight: 1
   dayIntensity: 1.2
-  currentElevation: 41.397106
-  currentAzimuth: 128.50871
+  currentElevation: 45.454887
+  currentAzimuth: 136.67268
   isDaytime: 1
 --- !u!1 &1345527297
 GameObject:
@@ -831,8 +831,8 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0, y: 0.5}
   m_AnchorMax: {x: 0, y: 0.5}
-  m_AnchoredPosition: {x: 100, y: 96}
-  m_SizeDelta: {x: 200, y: 300}
+  m_AnchoredPosition: {x: 125, y: 96}
+  m_SizeDelta: {x: 250, y: 300}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!114 &1345527299
 MonoBehaviour:
@@ -2575,19 +2575,19 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 8333956826230110593, guid: f423709afaee441be8fc62861c17efc8, type: 3}
       propertyPath: m_LocalRotation.w
-      value: 0.84259176
+      value: 0.8572045
       objectReference: {fileID: 0}
     - target: {fileID: 8333956826230110593, guid: f423709afaee441be8fc62861c17efc8, type: 3}
       propertyPath: m_LocalRotation.x
-      value: 0.31836462
+      value: 0.35905895
       objectReference: {fileID: 0}
     - target: {fileID: 8333956826230110593, guid: f423709afaee441be8fc62861c17efc8, type: 3}
       propertyPath: m_LocalRotation.y
-      value: -0.40633905
+      value: -0.34049344
       objectReference: {fileID: 0}
     - target: {fileID: 8333956826230110593, guid: f423709afaee441be8fc62861c17efc8, type: 3}
       propertyPath: m_LocalRotation.z
-      value: 0.15353101
+      value: 0.14262316
       objectReference: {fileID: 0}
     - target: {fileID: 8333956826230110593, guid: f423709afaee441be8fc62861c17efc8, type: 3}
       propertyPath: m_LocalEulerAnglesHint.x

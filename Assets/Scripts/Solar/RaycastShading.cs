@@ -89,7 +89,6 @@ public class RaycastShading : MonoBehaviour
                 Color.red
             );
 
-            Debug.Log("Panel is shaded. Output: 0W");
 
             return;
         }
@@ -123,11 +122,5 @@ public class RaycastShading : MonoBehaviour
             panelEfficiency;
 
         CurrentPower = rawEnergy;
-
-        Debug.Log(
-            $"Irradiance: {CurrentIrradiance:F2} W/m² | " +
-            $"Area: {panelArea}m² | " +
-            $"Output: {CurrentPower:F2} W"
-        );
     }
 }

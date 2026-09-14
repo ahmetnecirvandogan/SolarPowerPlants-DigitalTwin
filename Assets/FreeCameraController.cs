@@ -1,4 +1,5 @@
 using UnityEngine;
+using UnityEngine.InputSystem;
 
 public class FreeCameraController : MonoBehaviour
 {
@@ -6,66 +7,68 @@ public class FreeCameraController : MonoBehaviour
     public float moveSpeed = 10f;
     public float fastMoveSpeed = 25f;
 
-    [Header("Mouse Look")]
-    public float mouseSensitivity = 2f;
+    [Header("Look")]
+    public float lookSpeed = 60f;
 
-    private float rotationX = 0f;
-    private float rotationY = 0f;
+    private float pitch = 0f;
+    private float yaw = 0f;
 
     private void Start()
     {
-        rotationX = transform.eulerAngles.y;
-        rotationY = transform.eulerAngles.x;
+        Vector3 angles = transform.eulerAngles;
 
-        Cursor.lockState = CursorLockMode.Locked;
-        Cursor.visible = false;
+        yaw = angles.y;
+        pitch = angles.x;
+
+        // Convert Unity's 0-360 pitch into -180 to 180
+        if (pitch > 180f)
+            pitch -= 360f;
     }
 
     private void Update()
     {
         MoveCamera();
         LookAround();
-
-        if (Input.GetKeyDown(KeyCode.Escape))
-        {
-            Cursor.lockState = CursorLockMode.None;
-            Cursor.visible = true;
-        }
-
-        if (Input.GetMouseButtonDown(0))
-        {
-            Cursor.lockState = CursorLockMode.Locked;
-            Cursor.visible = false;
-        }
     }
 
     private void MoveCamera()
     {
-        float speed =
-            Input.GetKey(KeyCode.LeftShift)
-                ? fastMoveSpeed
-                : moveSpeed;
+        if (Keyboard.current == null)
+            return;
 
-        float horizontal =
-            Input.GetAxis("Horizontal");
+        Vector3 movement = Vector3.zero;
 
-        float vertical =
-            Input.GetAxis("Vertical");
+        // WASD
+        if (Keyboard.current.wKey.isPressed)
+            movement += transform.forward;
 
-        Vector3 movement =
-            transform.forward * vertical +
-            transform.right * horizontal;
+        if (Keyboard.current.sKey.isPressed)
+            movement -= transform.forward;
 
-        transform.position +=
-            movement * speed * Time.deltaTime;
+        if (Keyboard.current.dKey.isPressed)
+            movement += transform.right;
 
-        if (Input.GetKey(KeyCode.E))
+        if (Keyboard.current.aKey.isPressed)
+            movement -= transform.right;
+
+        float speed = Keyboard.current.leftShiftKey.isPressed
+            ? fastMoveSpeed
+            : moveSpeed;
+
+        if (movement != Vector3.zero)
+        {
+            transform.position +=
+                movement.normalized * speed * Time.deltaTime;
+        }
+
+        // Q / E = vertical movement
+        if (Keyboard.current.eKey.isPressed)
         {
             transform.position +=
                 Vector3.up * speed * Time.deltaTime;
         }
 
-        if (Input.GetKey(KeyCode.Q))
+        if (Keyboard.current.qKey.isPressed)
         {
             transform.position -=
                 Vector3.up * speed * Time.deltaTime;
@@ -74,28 +77,33 @@ public class FreeCameraController : MonoBehaviour
 
     private void LookAround()
     {
-        if (Cursor.lockState != CursorLockMode.Locked)
+        if (Keyboard.current == null)
             return;
 
-        float mouseX =
-            Input.GetAxis("Mouse X") *
-            mouseSensitivity;
+        float horizontal = 0f;
+        float vertical = 0f;
 
-        float mouseY =
-            Input.GetAxis("Mouse Y") *
-            mouseSensitivity;
+        // Left / Right arrows
+        if (Keyboard.current.leftArrowKey.isPressed)
+            horizontal -= 1f;
 
-        rotationX += mouseX;
-        rotationY -= mouseY;
+        if (Keyboard.current.rightArrowKey.isPressed)
+            horizontal += 1f;
 
-        rotationY =
-            Mathf.Clamp(rotationY, -89f, 89f);
+        // Up / Down arrows
+        if (Keyboard.current.upArrowKey.isPressed)
+            vertical += 1f;
+
+        if (Keyboard.current.downArrowKey.isPressed)
+            vertical -= 1f;
+
+        yaw += horizontal * lookSpeed * Time.deltaTime;
+        pitch -= vertical * lookSpeed * Time.deltaTime;
+
+        // Prevent camera from flipping upside down
+        pitch = Mathf.Clamp(pitch, -89f, 89f);
 
         transform.rotation =
-            Quaternion.Euler(
-                rotationY,
-                rotationX,
-                0f
-            );
+            Quaternion.Euler(pitch, yaw, 0f);
     }
 }
