@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using TMPro;
 using UnityEngine;
@@ -36,14 +37,23 @@ public class SolarUI : MonoBehaviour
     [Header("Energy Calculation")]
     public bool calculateDailyEnergy = true;
 
+    [Tooltip("Time interval used when estimating daily energy.")]
+    [Min(1)]
+    public int energyCalculationStepMinutes = 10;
+
     private float accumulatedEnergyWh = 0f;
+
     private float graphTimer = 0f;
 
     private readonly List<float> powerHistory =
         new List<float>();
 
-    private float previousSimulatedHour = -1f;
-    private int previousDayOfYear = -1;
+    private DateTime lastCalculatedDateTime =
+        DateTime.MinValue;
+
+    // ========================================================================
+    // UNITY
+    // ========================================================================
 
     private void Start()
     {
@@ -61,13 +71,10 @@ public class SolarUI : MonoBehaviour
             );
         }
 
-        if (rotateSun != null)
+        if (rotateSun != null &&
+            raycastShading != null)
         {
-            previousSimulatedHour =
-                rotateSun.CurrentSimulatedHour;
-
-            previousDayOfYear =
-                rotateSun.CurrentDayOfYear;
+            RecalculateDailyEnergy();
         }
 
         UpdateUI();
@@ -82,7 +89,9 @@ public class SolarUI : MonoBehaviour
         }
 
         UpdateDailyEnergy();
+
         UpdateGraph();
+
         UpdateUI();
     }
 
@@ -90,8 +99,8 @@ public class SolarUI : MonoBehaviour
     // UI
     // ========================================================================
 
-    // Use pixels (e.g. 240) or percentage (e.g. 55%) depending on your rect size
-    private const string ColPos = "<pos=150>"; 
+    private const string ColPos =
+        "<pos=150>";
 
     private void UpdateUI()
     {
@@ -99,7 +108,8 @@ public class SolarUI : MonoBehaviour
         {
             locationText.text =
                 $"LOCATION\t\t" +
-                $"{rotateSun.Latitude:F2}°, {rotateSun.Longitude:F2}°";
+                $"{rotateSun.Latitude:F2}°, " +
+                $"{rotateSun.Longitude:F2}°";
         }
 
         if (elevationText != null)
@@ -132,10 +142,17 @@ public class SolarUI : MonoBehaviour
 
         if (powerText != null)
         {
-            float power = raycastShading.CurrentPower;
-            string powerStr = power >= 1000f ? $"{power / 1000f:F2} kW" : $"{power:F1} W";
+            float power =
+                raycastShading.CurrentPower;
 
-            powerText.text = $"CURRENT POWER{ColPos}{powerStr}";
+            string powerStr =
+                power >= 1000f
+                    ? $"{power / 1000f:F2} kW"
+                    : $"{power:F1} W";
+
+            powerText.text =
+                $"CURRENT POWER{ColPos}" +
+                $"{powerStr}";
         }
 
         if (efficiencyText != null)
@@ -154,14 +171,16 @@ public class SolarUI : MonoBehaviour
 
         if (dailyEnergyText != null)
         {
-            string energyStr = accumulatedEnergyWh >= 1000f 
-                ? $"{accumulatedEnergyWh / 1000f:F2} kWh" 
-                : $"{accumulatedEnergyWh:F1} Wh";
+            string energyStr =
+                accumulatedEnergyWh >= 1000f
+                    ? $"{accumulatedEnergyWh / 1000f:F2} kWh"
+                    : $"{accumulatedEnergyWh:F1} Wh";
 
-            dailyEnergyText.text = $"TODAY'S ENERGY{ColPos}{energyStr}";
+            dailyEnergyText.text =
+                $"TODAY'S ENERGY{ColPos}" +
+                $"{energyStr}";
         }
     }
-
 
     // ========================================================================
     // DAILY ENERGY
@@ -174,48 +193,213 @@ public class SolarUI : MonoBehaviour
             return;
         }
 
-        float currentHour =
-            rotateSun.CurrentSimulatedHour;
+        DateTime currentDateTime =
+            rotateSun.CurrentLocalDateTime;
 
-        int currentDay =
-            rotateSun.CurrentDayOfYear;
+        // Recalculate only when the selected minute changes.
+        if (currentDateTime ==
+            lastCalculatedDateTime)
+        {
+            return;
+        }
 
-        if (previousDayOfYear != -1 &&
-            currentDay != previousDayOfYear)
+        RecalculateDailyEnergy();
+    }
+
+    private void RecalculateDailyEnergy()
+    {
+        if (!calculateDailyEnergy ||
+            rotateSun == null ||
+            raycastShading == null)
+        {
+            return;
+        }
+
+        DateTime selectedDateTime =
+            rotateSun.CurrentLocalDateTime;
+
+        // ------------------------------------------------------------
+        // Start exactly at midnight.
+        // ------------------------------------------------------------
+
+        DateTime midnight =
+            selectedDateTime.Date;
+
+        // If it is exactly midnight, energy is exactly zero.
+        if (selectedDateTime <= midnight)
         {
             accumulatedEnergyWh = 0f;
+
+            lastCalculatedDateTime =
+                selectedDateTime;
+
+            return;
         }
 
-        float deltaHours = 0f;
+        // ------------------------------------------------------------
+        // Integrate solar power from midnight to selected time.
+        // ------------------------------------------------------------
 
-        if (previousSimulatedHour >= 0f)
+        double totalEnergyWh = 0.0;
+
+        DateTime sampleTime =
+            midnight;
+
+        DateTime previousSampleTime =
+            sampleTime;
+
+        float previousPower =
+            CalculateEstimatedPower(
+                previousSampleTime
+            );
+
+        while (sampleTime <
+               selectedDateTime)
         {
-            deltaHours =
-                currentHour -
-                previousSimulatedHour;
+            DateTime nextSampleTime =
+                sampleTime.AddMinutes(
+                    energyCalculationStepMinutes
+                );
 
-            if (deltaHours < 0f)
+            if (nextSampleTime >
+                selectedDateTime)
             {
-                deltaHours += 24f;
+                nextSampleTime =
+                    selectedDateTime;
             }
+
+            float nextPower =
+                CalculateEstimatedPower(
+                    nextSampleTime
+                );
+
+            double intervalHours =
+                (
+                    nextSampleTime -
+                    previousSampleTime
+                ).TotalHours;
+
+            // Trapezoidal integration.
+            double averagePower =
+                (
+                    previousPower +
+                    nextPower
+                ) / 2.0;
+
+            totalEnergyWh +=
+                averagePower *
+                intervalHours;
+
+            previousSampleTime =
+                nextSampleTime;
+
+            previousPower =
+                nextPower;
+
+            sampleTime =
+                nextSampleTime;
         }
 
-        if (deltaHours > 1f)
+        accumulatedEnergyWh =
+            (float)Math.Max(
+                0.0,
+                totalEnergyWh
+            );
+
+        lastCalculatedDateTime =
+            selectedDateTime;
+    }
+
+    // ========================================================================
+    // ESTIMATE POWER AT AN ARBITRARY TIME
+    // ========================================================================
+
+    private float CalculateEstimatedPower(
+        DateTime localDateTime)
+    {
+        Vector3 sunDirection =
+            rotateSun.GetSunDirectionAt(
+                localDateTime
+            );
+
+        float elevation;
+        float azimuth;
+
+        rotateSun.GetSolarPositionAt(
+            localDateTime,
+            out elevation,
+            out azimuth
+        );
+
+        // Sun is below the horizon.
+        if (elevation <= 0f)
         {
-            deltaHours = 0f;
+            return 0f;
         }
+
+        // ------------------------------------------------------------
+        // Check whether another object blocks the panel.
+        // ------------------------------------------------------------
+
+        Vector3 rayOrigin =
+            raycastShading.transform.position +
+            raycastShading.transform.up *
+            raycastShading.surfaceOffset;
+
+        bool isShaded =
+            Physics.Raycast(
+                rayOrigin,
+                sunDirection,
+                raycastShading.raycastDistance
+            );
+
+        if (isShaded)
+        {
+            return 0f;
+        }
+
+        // ------------------------------------------------------------
+        // Calculate incidence angle.
+        // ------------------------------------------------------------
+
+        float dotProduct =
+            Vector3.Dot(
+                raycastShading.transform.up,
+                sunDirection
+            );
+
+        float intensity =
+            Mathf.Max(
+                0f,
+                dotProduct
+            );
+
+        if (intensity <= 0f)
+        {
+            return 0f;
+        }
+
+        // ------------------------------------------------------------
+        // Calculate irradiance.
+        // ------------------------------------------------------------
+
+        float irradiance =
+            raycastShading.solarIrradiance *
+            intensity;
+
+        // ------------------------------------------------------------
+        // Calculate electrical power.
+        // ------------------------------------------------------------
 
         float power =
-            raycastShading.CurrentPower;
+            irradiance *
+            raycastShading.panelArea *
+            raycastShading.panelEfficiency;
 
-        accumulatedEnergyWh +=
-            power * deltaHours;
-
-        previousSimulatedHour =
-            currentHour;
-
-        previousDayOfYear =
-            currentDay;
+        return Mathf.Max(
+            0f,
+            power
+        );
     }
 
     // ========================================================================
@@ -224,9 +408,11 @@ public class SolarUI : MonoBehaviour
 
     private void UpdateGraph()
     {
-        graphTimer += Time.deltaTime;
+        graphTimer +=
+            Time.deltaTime;
 
-        if (graphTimer < graphUpdateInterval)
+        if (graphTimer <
+            graphUpdateInterval)
         {
             return;
         }
@@ -236,9 +422,12 @@ public class SolarUI : MonoBehaviour
         float currentPower =
             raycastShading.CurrentPower;
 
-        powerHistory.Add(currentPower);
+        powerHistory.Add(
+            currentPower
+        );
 
-        if (powerHistory.Count > maxGraphPoints)
+        if (powerHistory.Count >
+            maxGraphPoints)
         {
             powerHistory.RemoveAt(0);
         }
@@ -254,12 +443,16 @@ public class SolarUI : MonoBehaviour
             return;
         }
 
-        for (int i = graphLineContainer.childCount - 1;
-             i >= 0;
-             i--)
+        for (
+            int i =
+                graphLineContainer.childCount - 1;
+            i >= 0;
+            i--)
         {
             Destroy(
-                graphLineContainer.GetChild(i).gameObject
+                graphLineContainer
+                    .GetChild(i)
+                    .gameObject
             );
         }
 
@@ -276,7 +469,9 @@ public class SolarUI : MonoBehaviour
 
         float maxPower = 1f;
 
-        foreach (float power in powerHistory)
+        foreach (
+            float power
+            in powerHistory)
         {
             if (power > maxPower)
             {
@@ -284,9 +479,10 @@ public class SolarUI : MonoBehaviour
             }
         }
 
-        for (int i = 0;
-             i < powerHistory.Count - 1;
-             i++)
+        for (
+            int i = 0;
+            i < powerHistory.Count - 1;
+            i++)
         {
             float x1 =
                 (float)i /
@@ -299,16 +495,24 @@ public class SolarUI : MonoBehaviour
                 width;
 
             float y1 =
-                (powerHistory[i] / maxPower) *
+                (powerHistory[i] /
+                maxPower) *
                 height;
 
             float y2 =
-                (powerHistory[i + 1] / maxPower) *
+                (powerHistory[i + 1] /
+                maxPower) *
                 height;
 
             CreateGraphLine(
-                new Vector2(x1, y1),
-                new Vector2(x2, y2)
+                new Vector2(
+                    x1,
+                    y1
+                ),
+                new Vector2(
+                    x2,
+                    y2
+                )
             );
         }
     }
@@ -318,7 +522,9 @@ public class SolarUI : MonoBehaviour
         Vector2 end)
     {
         GameObject lineObject =
-            new GameObject("GraphLine");
+            new GameObject(
+                "GraphLine"
+            );
 
         lineObject.transform.SetParent(
             graphLineContainer,
@@ -341,7 +547,8 @@ public class SolarUI : MonoBehaviour
             Mathf.Atan2(
                 direction.y,
                 direction.x
-            ) * Mathf.Rad2Deg;
+            ) *
+            Mathf.Rad2Deg;
 
         rect.sizeDelta =
             new Vector2(
@@ -350,7 +557,8 @@ public class SolarUI : MonoBehaviour
             );
 
         rect.anchoredPosition =
-            start + direction * 0.5f;
+            start +
+            direction * 0.5f;
 
         rect.localRotation =
             Quaternion.Euler(
@@ -359,6 +567,7 @@ public class SolarUI : MonoBehaviour
                 angle
             );
 
-        image.raycastTarget = false;
+        image.raycastTarget =
+            false;
     }
 }

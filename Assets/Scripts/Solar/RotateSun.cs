@@ -5,100 +5,124 @@ using UnityEngine;
 [RequireComponent(typeof(Light))]
 public class RotateSun : MonoBehaviour
 {
+    public enum TimeMode
+    {
+        Live,
+        Historical
+    }
+
     [Header("Time Mode")]
-    [Tooltip("When enabled, synchronizes sun position directly with system clock (UTC).")]
-    [SerializeField] private bool useSystemTime = true;
+    [SerializeField] private TimeMode timeMode = TimeMode.Live;
 
-    [Tooltip("Speed multiplier for simulated time when useSystemTime is false.")]
+    [Header("Historical Date & Time")]
+    [SerializeField] private int historicalYear = 2026;
+
+    [Range(1, 12)]
+    [SerializeField] private int historicalMonth = 1;
+
+    [Range(1, 31)]
+    [SerializeField] private int historicalDay = 1;
+
+    [Range(0, 23)]
+    [SerializeField] private int historicalHour = 12;
+
+    [Range(0, 59)]
+    [SerializeField] private int historicalMinute = 0;
+
+    [Header("Time Simulation")]
+    [Tooltip("When enabled in Historical mode, time advances automatically.")]
+    [SerializeField] private bool playHistoricalTime = false;
+
+    [Tooltip("How many simulated seconds pass per real second.")]
     [Range(0.1f, 3600f)]
-    [SerializeField] private float timeScaleMultiplier = 1f;
-
-    [Tooltip("Simulated hour of the day (0 - 24) when useSystemTime is false.")]
-    [Range(0f, 24f)]
-    [SerializeField] private float simulatedHour = 12f;
-
-    [Tooltip("Simulated day of year (1 - 365) when useSystemTime is false.")]
-    [Range(1, 365)]
-    [SerializeField] private int simulatedDayOfYear = 252;
+    [SerializeField] private float timeScaleMultiplier = 60f;
 
     [Header("Geographic Coordinates & Scene Orientation")]
-    [Tooltip("Latitude of the solar plant (-90 to 90, Ankara ~ 39.93).")]
+    [Tooltip("Latitude of the solar plant.")]
     [Range(-90f, 90f)]
     [SerializeField] private float latitude = 39.93f;
 
-    [Tooltip("Longitude of the solar plant (-180 to 180, Ankara ~ 32.86).")]
+    [Tooltip("Longitude of the solar plant.")]
     [Range(-180f, 180f)]
     [SerializeField] private float longitude = 32.86f;
 
-    [Tooltip("Compass yaw angle in degrees. 0 means +Z is North, 90 means +X is North, etc.")]
+    [Tooltip("Compass yaw angle in degrees.")]
     [Range(0f, 360f)]
     [SerializeField] private float northOffset = 0f;
 
+    [Header("Location")]
+    [SerializeField] private string locationName = "Ankara, Türkiye";
+
     [Header("Light Settings")]
-    [Tooltip("Automatically dims or disables directional light intensity at night.")]
     [SerializeField] private bool adjustIntensityForNight = true;
 
     [SerializeField] private float dayIntensity = 1.2f;
 
-    [Header("Calculated Solar Position (Read-Only)")]
+    [Header("Calculated Solar Position")]
     [SerializeField] private float currentElevation;
     [SerializeField] private float currentAzimuth;
     [SerializeField] private bool isDaytime;
 
     private Light sunLight;
 
-    // ------------------------------------------------------------------------
-    // Public Runtime Properties
-    // These values can be accessed by the UI and other systems.
-    // ------------------------------------------------------------------------
+    // ========================================================================
+    // PUBLIC PROPERTIES
+    // ========================================================================
 
-    /// <summary>
-    /// Current solar elevation in degrees.
-    /// </summary>
     public float CurrentElevation => currentElevation;
 
-    /// <summary>
-    /// Current solar azimuth in degrees.
-    /// 0 = North, 90 = East, 180 = South, 270 = West.
-    /// </summary>
     public float CurrentAzimuth => currentAzimuth;
 
-    /// <summary>
-    /// Whether the sun is currently above the horizon.
-    /// </summary>
     public bool IsDaytime => isDaytime;
 
-    /// <summary>
-    /// Current simulated hour of the day.
-    /// Range: 0-24.
-    /// </summary>
-    public float CurrentSimulatedHour => simulatedHour;
-
-    /// <summary>
-    /// Current simulated day of the year.
-    /// Range: 1-365.
-    /// </summary>
-    public int CurrentDayOfYear => simulatedDayOfYear;
-
-    /// <summary>
-    /// Latitude of the solar plant.
-    /// </summary>
     public float Latitude => latitude;
 
-    /// <summary>
-    /// Longitude of the solar plant.
-    /// </summary>
     public float Longitude => longitude;
 
-    /// <summary>
-    /// Whether the system is currently using real system time.
-    /// </summary>
-    public bool UseSystemTime => useSystemTime;
+    public string LocationName => locationName;
 
-    /// <summary>
-    /// Current simulated time scale multiplier.
-    /// </summary>
-    public float TimeScaleMultiplier => timeScaleMultiplier;
+    public TimeMode CurrentTimeMode => timeMode;
+
+    public bool IsLiveMode =>
+        timeMode == TimeMode.Live;
+
+    public bool IsHistoricalMode =>
+        timeMode == TimeMode.Historical;
+
+    public DateTime CurrentLocalDateTime
+    {
+        get
+        {
+            if (timeMode == TimeMode.Live)
+            {
+                return DateTime.Now;
+            }
+
+            return GetHistoricalDateTime();
+        }
+    }
+
+    public int CurrentYear =>
+        CurrentLocalDateTime.Year;
+
+    public int CurrentMonth =>
+        CurrentLocalDateTime.Month;
+
+    public int CurrentDay =>
+        CurrentLocalDateTime.Day;
+
+    public int CurrentHour =>
+        CurrentLocalDateTime.Hour;
+
+    public int CurrentMinute =>
+        CurrentLocalDateTime.Minute;
+
+    public int CurrentDayOfYear =>
+        CurrentLocalDateTime.DayOfYear;
+
+    // ========================================================================
+    // UNITY
+    // ========================================================================
 
     private void Awake()
     {
@@ -112,115 +136,351 @@ public class RotateSun : MonoBehaviour
 
     private void Update()
     {
-        if (useSystemTime)
+        if (timeMode == TimeMode.Live)
         {
+            UpdateSunPosition();
+            return;
+        }
+
+        if (playHistoricalTime &&
+            Application.isPlaying)
+        {
+            AdvanceHistoricalTime();
+        }
+
+        UpdateSunPosition();
+    }
+
+    // ========================================================================
+    // PUBLIC TIME CONTROLS
+    // ========================================================================
+
+    public void SetLiveMode()
+    {
+        timeMode = TimeMode.Live;
+
+        UpdateSunPosition();
+    }
+
+    public void SetHistoricalMode()
+    {
+        timeMode = TimeMode.Historical;
+
+        UpdateSunPosition();
+    }
+
+    public void SetHistoricalDate(
+        int year,
+        int month,
+        int day)
+    {
+        try
+        {
+            DateTime testDate =
+                new DateTime(
+                    year,
+                    month,
+                    day,
+                    historicalHour,
+                    historicalMinute,
+                    0
+                );
+
+            historicalYear =
+                testDate.Year;
+
+            historicalMonth =
+                testDate.Month;
+
+            historicalDay =
+                testDate.Day;
+
+            timeMode =
+                TimeMode.Historical;
+
             UpdateSunPosition();
         }
-        else
+        catch (ArgumentOutOfRangeException)
         {
-            if (Application.isPlaying)
-            {
-                simulatedHour +=
-                    (Time.deltaTime * timeScaleMultiplier) / 3600f;
-
-                if (simulatedHour >= 24f)
-                {
-                    simulatedHour -= 24f;
-
-                    simulatedDayOfYear =
-                        (simulatedDayOfYear % 365) + 1;
-                }
-            }
-
-            UpdateSunPosition();
+            Debug.LogWarning(
+                "RotateSun: Invalid historical date."
+            );
         }
     }
 
+    public void SetHistoricalTime(
+        int hour,
+        int minute)
+    {
+        historicalHour =
+            Mathf.Clamp(hour, 0, 23);
+
+        historicalMinute =
+            Mathf.Clamp(minute, 0, 59);
+
+        timeMode =
+            TimeMode.Historical;
+
+        UpdateSunPosition();
+    }
+
+    public void SetHistoricalDateTime(
+        int year,
+        int month,
+        int day,
+        int hour,
+        int minute)
+    {
+        try
+        {
+            DateTime selectedDate =
+                new DateTime(
+                    year,
+                    month,
+                    day,
+                    hour,
+                    minute,
+                    0
+                );
+
+            historicalYear =
+                selectedDate.Year;
+
+            historicalMonth =
+                selectedDate.Month;
+
+            historicalDay =
+                selectedDate.Day;
+
+            historicalHour =
+                selectedDate.Hour;
+
+            historicalMinute =
+                selectedDate.Minute;
+
+            timeMode =
+                TimeMode.Historical;
+
+            UpdateSunPosition();
+        }
+        catch (ArgumentOutOfRangeException)
+        {
+            Debug.LogWarning(
+                "RotateSun: Invalid historical date/time."
+            );
+        }
+    }
+
+    // ========================================================================
+    // HISTORICAL TIME
+    // ========================================================================
+
+    private DateTime GetHistoricalDateTime()
+    {
+        try
+        {
+            return new DateTime(
+                historicalYear,
+                historicalMonth,
+                historicalDay,
+                historicalHour,
+                historicalMinute,
+                0
+            );
+        }
+        catch (ArgumentOutOfRangeException)
+        {
+            return new DateTime(
+                2026,
+                1,
+                1,
+                12,
+                0,
+                0
+            );
+        }
+    }
+
+    private void AdvanceHistoricalTime()
+    {
+        DateTime current =
+            GetHistoricalDateTime();
+
+        current =
+            current.AddSeconds(
+                Time.deltaTime *
+                timeScaleMultiplier
+            );
+
+        historicalYear =
+            current.Year;
+
+        historicalMonth =
+            current.Month;
+
+        historicalDay =
+            current.Day;
+
+        historicalHour =
+            current.Hour;
+
+        historicalMinute =
+            current.Minute;
+    }
+
+    // ========================================================================
+    // SOLAR POSITION
+    // ========================================================================
+
     public void UpdateSunPosition()
     {
-        DateTime utcNow;
+        DateTime localDateTime =
+            CurrentLocalDateTime;
 
-        if (useSystemTime)
-        {
-            utcNow = DateTime.UtcNow;
-
-            // Keep the inspector values synchronized with real local time.
-            simulatedHour =
-                (float)DateTime.Now.TimeOfDay.TotalHours;
-
-            simulatedDayOfYear =
-                DateTime.Now.DayOfYear;
-        }
-        else
-        {
-            DateTime approxDate =
-                new DateTime(
-                    DateTime.UtcNow.Year,
-                    1,
-                    1
-                ).AddDays(simulatedDayOfYear - 1);
-
-            float utcEquivalentHour =
-                simulatedHour - (longitude / 15f);
-
-            if (utcEquivalentHour < 0f)
-            {
-                utcEquivalentHour += 24f;
-            }
-
-            if (utcEquivalentHour >= 24f)
-            {
-                utcEquivalentHour -= 24f;
-            }
-
-            int uHour =
-                Mathf.FloorToInt(utcEquivalentHour);
-
-            float uMinFloat =
-                (utcEquivalentHour - uHour) * 60f;
-
-            int uMin =
-                Mathf.FloorToInt(uMinFloat);
-
-            int uSec =
-                Mathf.FloorToInt(
-                    (uMinFloat - uMin) * 60f
-                );
-
-            utcNow =
-                new DateTime(
-                    approxDate.Year,
-                    approxDate.Month,
-                    approxDate.Day,
-                    uHour,
-                    uMin,
-                    uSec,
-                    DateTimeKind.Utc
-                );
-        }
-
-        CalculateSolarPosition(
-            utcNow,
-            latitude,
-            longitude,
+        CalculateSolarPositionForLocalTime(
+            localDateTime,
             out currentElevation,
             out currentAzimuth
         );
 
-        isDaytime = currentElevation > 0f;
+        isDaytime =
+            currentElevation > 0f;
 
         ApplySunTransform();
         ApplyLighting();
     }
 
+    /// <summary>
+    /// Calculates the solar elevation and azimuth for an arbitrary
+    /// local date/time without changing the current selected time.
+    /// </summary>
+    public void GetSolarPositionAt(
+        DateTime localDateTime,
+        out float elevation,
+        out float azimuth)
+    {
+        CalculateSolarPositionForLocalTime(
+            localDateTime,
+            out elevation,
+            out azimuth
+        );
+    }
+
+    /// <summary>
+    /// Returns the direction FROM the solar panel/scene toward the Sun
+    /// for an arbitrary local date/time.
+    /// </summary>
+    public Vector3 GetSunDirectionAt(
+        DateTime localDateTime)
+    {
+        float elevation;
+        float azimuth;
+
+        GetSolarPositionAt(
+            localDateTime,
+            out elevation,
+            out azimuth
+        );
+
+        float effectiveAzimuthRad =
+            (azimuth + northOffset) *
+            Mathf.Deg2Rad;
+
+        float elevRad =
+            elevation *
+            Mathf.Deg2Rad;
+
+        Vector3 sunDirection =
+            new Vector3(
+                Mathf.Cos(elevRad) *
+                Mathf.Sin(effectiveAzimuthRad),
+
+                Mathf.Sin(elevRad),
+
+                Mathf.Cos(elevRad) *
+                Mathf.Cos(effectiveAzimuthRad)
+            );
+
+        return sunDirection.normalized;
+    }
+
+    private void CalculateSolarPositionForLocalTime(
+        DateTime localDateTime,
+        out float elevation,
+        out float azimuth)
+    {
+        // Convert local plant time to the longitude-based
+        // UTC-equivalent solar time.
+        float utcEquivalentHour =
+            (float)localDateTime.TimeOfDay.TotalHours
+            - (longitude / 15f);
+
+        DateTime utcDate =
+            localDateTime.Date;
+
+        while (utcEquivalentHour < 0f)
+        {
+            utcEquivalentHour += 24f;
+            utcDate =
+                utcDate.AddDays(-1);
+        }
+
+        while (utcEquivalentHour >= 24f)
+        {
+            utcEquivalentHour -= 24f;
+            utcDate =
+                utcDate.AddDays(1);
+        }
+
+        int uHour =
+            Mathf.FloorToInt(
+                utcEquivalentHour
+            );
+
+        float minuteFloat =
+            (utcEquivalentHour - uHour) *
+            60f;
+
+        int uMinute =
+            Mathf.FloorToInt(
+                minuteFloat
+            );
+
+        float secondFloat =
+            (minuteFloat - uMinute) *
+            60f;
+
+        int uSecond =
+            Mathf.FloorToInt(
+                secondFloat
+            );
+
+        DateTime utcTime =
+            new DateTime(
+                utcDate.Year,
+                utcDate.Month,
+                utcDate.Day,
+                uHour,
+                uMinute,
+                uSecond,
+                DateTimeKind.Utc
+            );
+
+        CalculateSolarPosition(
+            utcTime,
+            latitude,
+            longitude,
+            out elevation,
+            out azimuth
+        );
+    }
+
+    // ========================================================================
+    // SUN TRANSFORM
+    // ========================================================================
+
     private void ApplySunTransform()
     {
-        // Azimuth is clockwise from North:
-        // 0°   = +Z = North
-        // 90°  = +X = East
-        // 180° = -Z = South
-        // 270° = -X = West
-
         float effectiveAzimuthRad =
             (currentAzimuth + northOffset) *
             Mathf.Deg2Rad;
@@ -229,8 +489,6 @@ public class RotateSun : MonoBehaviour
             currentElevation *
             Mathf.Deg2Rad;
 
-        // Position vector pointing FROM the origin
-        // TOWARDS the sun in the sky.
         Vector3 sunDirectionInSky =
             new Vector3(
                 Mathf.Cos(elevRad) *
@@ -242,8 +500,6 @@ public class RotateSun : MonoBehaviour
                 Mathf.Cos(effectiveAzimuthRad)
             );
 
-        // Directional light shines FROM the sun
-        // DOWN onto the scene.
         Vector3 lightForward =
             -sunDirectionInSky;
 
@@ -257,21 +513,25 @@ public class RotateSun : MonoBehaviour
         }
     }
 
+    // ========================================================================
+    // LIGHTING
+    // ========================================================================
+
     private void ApplyLighting()
     {
-        if (!adjustIntensityForNight || sunLight == null)
+        if (!adjustIntensityForNight ||
+            sunLight == null)
         {
             return;
         }
 
         if (currentElevation > 5f)
         {
-            sunLight.intensity = dayIntensity;
+            sunLight.intensity =
+                dayIntensity;
         }
         else if (currentElevation > 0f)
         {
-            // Smooth sunrise / sunset fade
-            // between 0° and 5° elevation.
             sunLight.intensity =
                 Mathf.Lerp(
                     0f,
@@ -285,10 +545,10 @@ public class RotateSun : MonoBehaviour
         }
     }
 
-    /// <summary>
-    /// Computes solar elevation and azimuth using
-    /// the NOAA Solar Position Algorithm.
-    /// </summary>
+    // ========================================================================
+    // NOAA SOLAR POSITION
+    // ========================================================================
+
     private static void CalculateSolarPosition(
         DateTime utcTime,
         float lat,
@@ -305,13 +565,13 @@ public class RotateSun : MonoBehaviour
             utcTime.Second / 3600.0 +
             utcTime.Millisecond / 3600000.0;
 
-        // Fractional year in radians.
         double gamma =
             2.0 * Math.PI / 365.0 *
-            (dayOfYear - 1 +
-            (utcHours - 12.0) / 24.0);
+            (
+                dayOfYear - 1 +
+                (utcHours - 12.0) / 24.0
+            );
 
-        // Equation of time in minutes.
         double eqtime =
             229.18 *
             (
@@ -322,7 +582,6 @@ public class RotateSun : MonoBehaviour
                 0.040849 * Math.Sin(2.0 * gamma)
             );
 
-        // Solar declination in radians.
         double decl =
             0.006918 -
             0.399912 * Math.Cos(gamma) +
@@ -332,25 +591,25 @@ public class RotateSun : MonoBehaviour
             0.002697 * Math.Cos(3.0 * gamma) +
             0.00148 * Math.Sin(3.0 * gamma);
 
-        // True solar time in minutes.
         double timeOffset =
-            eqtime + 4.0 * lon;
+            eqtime +
+            4.0 * lon;
 
         double tst =
             utcHours * 60.0 +
             timeOffset;
 
-        // Solar hour angle in radians.
         double ha =
             (tst / 4.0) - 180.0;
 
         double haRad =
-            ha * (Math.PI / 180.0);
+            ha *
+            (Math.PI / 180.0);
 
         double latRad =
-            lat * (Math.PI / 180.0);
+            lat *
+            (Math.PI / 180.0);
 
-        // Solar zenith angle.
         double cosZenith =
             Math.Sin(latRad) *
             Math.Sin(decl) +
@@ -361,23 +620,25 @@ public class RotateSun : MonoBehaviour
         cosZenith =
             Math.Max(
                 -1.0,
-                Math.Min(1.0, cosZenith)
+                Math.Min(
+                    1.0,
+                    cosZenith
+                )
             );
 
         double zenith =
             Math.Acos(cosZenith);
 
         elevation =
-            (float)(
+            (float)
+            (
                 90.0 -
-                (zenith * (180.0 / Math.PI))
+                (
+                    zenith *
+                    (180.0 / Math.PI)
+                )
             );
 
-        // Solar azimuth angle.
-        // 0° = North
-        // 90° = East
-        // 180° = South
-        // 270° = West
         double azRad =
             Math.Atan2(
                 Math.Sin(haRad),
@@ -385,11 +646,16 @@ public class RotateSun : MonoBehaviour
                 Math.Sin(latRad) -
                 Math.Tan(decl) *
                 Math.Cos(latRad)
-            ) + Math.PI;
+            ) +
+            Math.PI;
 
         azimuth =
-            (float)(
-                (azRad * (180.0 / Math.PI)) % 360.0
+            (float)
+            (
+                (
+                    azRad *
+                    (180.0 / Math.PI)
+                ) % 360.0
             );
 
         if (azimuth < 0f)
