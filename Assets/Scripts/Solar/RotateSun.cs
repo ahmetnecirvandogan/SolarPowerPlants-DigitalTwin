@@ -350,10 +350,6 @@ public class RotateSun : MonoBehaviour
         ApplyLighting();
     }
 
-    /// <summary>
-    /// Calculates the solar elevation and azimuth for an arbitrary
-    /// local date/time without changing the current selected time.
-    /// </summary>
     public void GetSolarPositionAt(
         DateTime localDateTime,
         out float elevation,
@@ -366,10 +362,6 @@ public class RotateSun : MonoBehaviour
         );
     }
 
-    /// <summary>
-    /// Returns the direction FROM the solar panel/scene toward the Sun
-    /// for an arbitrary local date/time.
-    /// </summary>
     public Vector3 GetSunDirectionAt(
         DateTime localDateTime)
     {
@@ -409,8 +401,6 @@ public class RotateSun : MonoBehaviour
         out float elevation,
         out float azimuth)
     {
-        // Convert local plant time to the longitude-based
-        // UTC-equivalent solar time.
         float utcEquivalentHour =
             (float)localDateTime.TimeOfDay.TotalHours
             - (longitude / 15f);
@@ -421,39 +411,20 @@ public class RotateSun : MonoBehaviour
         while (utcEquivalentHour < 0f)
         {
             utcEquivalentHour += 24f;
-            utcDate =
-                utcDate.AddDays(-1);
+            utcDate = utcDate.AddDays(-1);
         }
 
         while (utcEquivalentHour >= 24f)
         {
             utcEquivalentHour -= 24f;
-            utcDate =
-                utcDate.AddDays(1);
+            utcDate = utcDate.AddDays(1);
         }
 
-        int uHour =
-            Mathf.FloorToInt(
-                utcEquivalentHour
-            );
-
-        float minuteFloat =
-            (utcEquivalentHour - uHour) *
-            60f;
-
-        int uMinute =
-            Mathf.FloorToInt(
-                minuteFloat
-            );
-
-        float secondFloat =
-            (minuteFloat - uMinute) *
-            60f;
-
-        int uSecond =
-            Mathf.FloorToInt(
-                secondFloat
-            );
+        int uHour = Mathf.FloorToInt(utcEquivalentHour);
+        float minuteFloat = (utcEquivalentHour - uHour) * 60f;
+        int uMinute = Mathf.FloorToInt(minuteFloat);
+        float secondFloat = (minuteFloat - uMinute) * 60f;
+        int uSecond = Mathf.FloorToInt(secondFloat);
 
         DateTime utcTime =
             new DateTime(
@@ -500,8 +471,7 @@ public class RotateSun : MonoBehaviour
                 Mathf.Cos(effectiveAzimuthRad)
             );
 
-        Vector3 lightForward =
-            -sunDirectionInSky;
+        Vector3 lightForward = -sunDirectionInSky;
 
         if (lightForward != Vector3.zero)
         {
@@ -527,8 +497,7 @@ public class RotateSun : MonoBehaviour
 
         if (currentElevation > 5f)
         {
-            sunLight.intensity =
-                dayIntensity;
+            sunLight.intensity = dayIntensity;
         }
         else if (currentElevation > 0f)
         {
@@ -556,8 +525,7 @@ public class RotateSun : MonoBehaviour
         out float elevation,
         out float azimuth)
     {
-        int dayOfYear =
-            utcTime.DayOfYear;
+        int dayOfYear = utcTime.DayOfYear;
 
         double utcHours =
             utcTime.Hour +
@@ -591,72 +559,32 @@ public class RotateSun : MonoBehaviour
             0.002697 * Math.Cos(3.0 * gamma) +
             0.00148 * Math.Sin(3.0 * gamma);
 
-        double timeOffset =
-            eqtime +
-            4.0 * lon;
+        double timeOffset = eqtime + 4.0 * lon;
+        double tst = utcHours * 60.0 + timeOffset;
+        double ha = (tst / 4.0) - 180.0;
 
-        double tst =
-            utcHours * 60.0 +
-            timeOffset;
-
-        double ha =
-            (tst / 4.0) - 180.0;
-
-        double haRad =
-            ha *
-            (Math.PI / 180.0);
-
-        double latRad =
-            lat *
-            (Math.PI / 180.0);
+        double haRad = ha * (Math.PI / 180.0);
+        double latRad = lat * (Math.PI / 180.0);
 
         double cosZenith =
-            Math.Sin(latRad) *
-            Math.Sin(decl) +
-            Math.Cos(latRad) *
-            Math.Cos(decl) *
-            Math.Cos(haRad);
+            Math.Sin(latRad) * Math.Sin(decl) +
+            Math.Cos(latRad) * Math.Cos(decl) * Math.Cos(haRad);
 
-        cosZenith =
-            Math.Max(
-                -1.0,
-                Math.Min(
-                    1.0,
-                    cosZenith
-                )
-            );
+        cosZenith = Math.Max(-1.0, Math.Min(1.0, cosZenith));
 
-        double zenith =
-            Math.Acos(cosZenith);
+        double zenith = Math.Acos(cosZenith);
 
         elevation =
-            (float)
-            (
-                90.0 -
-                (
-                    zenith *
-                    (180.0 / Math.PI)
-                )
-            );
+            (float)(90.0 - (zenith * (180.0 / Math.PI)));
 
         double azRad =
             Math.Atan2(
                 Math.Sin(haRad),
-                Math.Cos(haRad) *
-                Math.Sin(latRad) -
-                Math.Tan(decl) *
-                Math.Cos(latRad)
-            ) +
-            Math.PI;
+                Math.Cos(haRad) * Math.Sin(latRad) -
+                Math.Tan(decl) * Math.Cos(latRad)
+            ) + Math.PI;
 
-        azimuth =
-            (float)
-            (
-                (
-                    azRad *
-                    (180.0 / Math.PI)
-                ) % 360.0
-            );
+        azimuth = (float)((azRad * (180.0 / Math.PI)) % 360.0);
 
         if (azimuth < 0f)
         {

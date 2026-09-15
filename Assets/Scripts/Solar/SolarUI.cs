@@ -13,6 +13,16 @@ public class SolarUI : MonoBehaviour
     [Tooltip("The RaycastShading component attached to the solar panel.")]
     public RaycastShading raycastShading;
 
+    [Header("Time Panel")]
+    [Tooltip("The TimePanel GameObject in Unity.")]
+    public GameObject timePanel;
+
+    [Tooltip("Text component displaying the date and time.")]
+    public TMP_Text dateTimeText;
+
+    [Tooltip("Optional text component displaying the mode (LIVE / HISTORICAL).")]
+    public TMP_Text timeModeText;
+
     [Header("Information Text")]
     public TMP_Text locationText;
     public TMP_Text elevationText;
@@ -42,37 +52,24 @@ public class SolarUI : MonoBehaviour
     public int energyCalculationStepMinutes = 10;
 
     private float accumulatedEnergyWh = 0f;
-
     private float graphTimer = 0f;
-
-    private readonly List<float> powerHistory =
-        new List<float>();
-
-    private DateTime lastCalculatedDateTime =
-        DateTime.MinValue;
+    private readonly List<float> powerHistory = new List<float>();
+    private DateTime lastCalculatedDateTime = DateTime.MinValue;
 
     // ========================================================================
     // UNITY
     // ========================================================================
 
+    private void Awake()
+    {
+        AutoRecoverReferences();
+    }
+
     private void Start()
     {
-        if (rotateSun == null)
-        {
-            Debug.LogWarning(
-                "SolarUI: RotateSun reference is missing."
-            );
-        }
+        AutoRecoverReferences();
 
-        if (raycastShading == null)
-        {
-            Debug.LogWarning(
-                "SolarUI: RaycastShading reference is missing."
-            );
-        }
-
-        if (rotateSun != null &&
-            raycastShading != null)
+        if (rotateSun != null && raycastShading != null)
         {
             RecalculateDailyEnergy();
         }
@@ -82,99 +79,188 @@ public class SolarUI : MonoBehaviour
 
     private void Update()
     {
-        if (rotateSun == null ||
-            raycastShading == null)
+        if (rotateSun == null || raycastShading == null)
         {
-            return;
+            AutoRecoverReferences();
         }
 
-        UpdateDailyEnergy();
-
-        UpdateGraph();
+        if (rotateSun != null && raycastShading != null)
+        {
+            UpdateDailyEnergy();
+            UpdateGraph();
+        }
 
         UpdateUI();
+    }
+
+    // ========================================================================
+    // AUTO-RECOVERY (Restores any unlinked Inspector fields automatically)
+    // ========================================================================
+
+    private void AutoRecoverReferences()
+    {
+        if (rotateSun == null)
+        {
+            rotateSun = FindObjectOfType<RotateSun>();
+        }
+
+        if (raycastShading == null)
+        {
+            raycastShading = FindObjectOfType<RaycastShading>();
+        }
+
+        // Search all TextMeshPro texts in the scene/canvas to reconnect unlinked dashboard texts
+        TMP_Text[] allTexts = FindObjectsOfType<TMP_Text>(true);
+
+        foreach (TMP_Text t in allTexts)
+        {
+            string n = t.name.ToLower();
+
+            if (dateTimeText == null && (n.Contains("datetime") || n.Contains("time_text") || n.Contains("clock") || (timePanel != null && t.transform.IsChildOf(timePanel.transform))))
+            {
+                dateTimeText = t;
+            }
+            else if (locationText == null && n.Contains("location"))
+            {
+                locationText = t;
+            }
+            else if (elevationText == null && n.Contains("elevation"))
+            {
+                elevationText = t;
+            }
+            else if (azimuthText == null && n.Contains("azimuth"))
+            {
+                azimuthText = t;
+            }
+            else if (statusText == null && n.Contains("status"))
+            {
+                statusText = t;
+            }
+            else if (irradianceText == null && n.Contains("irradiance"))
+            {
+                irradianceText = t;
+            }
+            else if (powerText == null && n.Contains("power"))
+            {
+                powerText = t;
+            }
+            else if (efficiencyText == null && n.Contains("efficiency"))
+            {
+                efficiencyText = t;
+            }
+            else if (shadowText == null && n.Contains("shadow"))
+            {
+                shadowText = t;
+            }
+            else if (dailyEnergyText == null && (n.Contains("energy") || n.Contains("daily")))
+            {
+                dailyEnergyText = t;
+            }
+        }
     }
 
     // ========================================================================
     // UI
     // ========================================================================
 
-    private const string ColPos =
-        "<pos=150>";
+    private const string ColPos = "<pos=150>";
 
     private void UpdateUI()
     {
-        if (locationText != null)
+        // ------------------------------------------------------------
+        // Time & Date Display
+        // ------------------------------------------------------------
+        if (dateTimeText != null)
         {
-            locationText.text =
-                $"LOCATION\t\t" +
-                $"{rotateSun.Latitude:F2}°, " +
-                $"{rotateSun.Longitude:F2}°";
+            DateTime dt = (rotateSun != null && rotateSun.IsHistoricalMode)
+                ? rotateSun.CurrentLocalDateTime
+                : DateTime.Now;
+
+            dateTimeText.text = $"Date: {dt:dd-MM-yyyy}\nTime: {dt:HH:mm}";
         }
 
-        if (elevationText != null)
+        if (timeModeText != null && rotateSun != null)
         {
-            elevationText.text =
-                $"SOLAR ELEVATION{ColPos}" +
-                $"{rotateSun.CurrentElevation:F1}°";
+            timeModeText.text = rotateSun.IsLiveMode ? "LIVE" : "HISTORICAL";
         }
 
-        if (azimuthText != null)
+        // ------------------------------------------------------------
+        // Dashboard Panel Information
+        // ------------------------------------------------------------
+        if (rotateSun != null)
         {
-            azimuthText.text =
-                $"SOLAR AZIMUTH{ColPos}" +
-                $"{rotateSun.CurrentAzimuth:F1}°";
+            if (locationText != null)
+            {
+                locationText.text =
+                    $"LOCATION\t\t" +
+                    $"{rotateSun.Latitude:F2}°, " +
+                    $"{rotateSun.Longitude:F2}°";
+            }
+
+            if (elevationText != null)
+            {
+                elevationText.text =
+                    $"SOLAR ELEVATION{ColPos}" +
+                    $"{rotateSun.CurrentElevation:F1}°";
+            }
+
+            if (azimuthText != null)
+            {
+                azimuthText.text =
+                    $"SOLAR AZIMUTH{ColPos}" +
+                    $"{rotateSun.CurrentAzimuth:F1}°";
+            }
+
+            if (statusText != null)
+            {
+                statusText.text =
+                    $"STATUS{ColPos}" +
+                    $"{(rotateSun.IsDaytime ? "DAY" : "NIGHT")}";
+            }
         }
 
-        if (statusText != null)
+        if (raycastShading != null)
         {
-            statusText.text =
-                $"STATUS{ColPos}" +
-                $"{(rotateSun.IsDaytime ? "DAY" : "NIGHT")}";
-        }
+            if (irradianceText != null)
+            {
+                irradianceText.text =
+                    $"IRRADIANCE{ColPos}" +
+                    $"{raycastShading.CurrentIrradiance:F1} W/m²";
+            }
 
-        if (irradianceText != null)
-        {
-            irradianceText.text =
-                $"IRRADIANCE{ColPos}" +
-                $"{raycastShading.CurrentIrradiance:F1} W/m²";
-        }
+            if (powerText != null)
+            {
+                float power = raycastShading.CurrentPower;
 
-        if (powerText != null)
-        {
-            float power =
-                raycastShading.CurrentPower;
-
-            string powerStr =
-                power >= 1000f
+                string powerStr = power >= 1000f
                     ? $"{power / 1000f:F2} kW"
                     : $"{power:F1} W";
 
-            powerText.text =
-                $"CURRENT POWER{ColPos}" +
-                $"{powerStr}";
-        }
+                powerText.text =
+                    $"CURRENT POWER{ColPos}" +
+                    $"{powerStr}";
+            }
 
-        if (efficiencyText != null)
-        {
-            efficiencyText.text =
-                $"PANEL EFFICIENCY{ColPos}" +
-                $"{raycastShading.panelEfficiency * 100f:F1}%";
-        }
+            if (efficiencyText != null)
+            {
+                efficiencyText.text =
+                    $"PANEL EFFICIENCY{ColPos}" +
+                    $"{raycastShading.panelEfficiency * 100f:F1}%";
+            }
 
-        if (shadowText != null)
-        {
-            shadowText.text =
-                $"SHADOW{ColPos}" +
-                $"{(raycastShading.IsShaded ? "SHADED" : "CLEAR")}";
+            if (shadowText != null)
+            {
+                shadowText.text =
+                    $"SHADOW{ColPos}" +
+                    $"{(raycastShading.IsShaded ? "SHADED" : "CLEAR")}";
+            }
         }
 
         if (dailyEnergyText != null)
         {
-            string energyStr =
-                accumulatedEnergyWh >= 1000f
-                    ? $"{accumulatedEnergyWh / 1000f:F2} kWh"
-                    : $"{accumulatedEnergyWh:F1} Wh";
+            string energyStr = accumulatedEnergyWh >= 1000f
+                ? $"{accumulatedEnergyWh / 1000f:F2} kWh"
+                : $"{accumulatedEnergyWh:F1} Wh";
 
             dailyEnergyText.text =
                 $"TODAY'S ENERGY{ColPos}" +
@@ -188,17 +274,14 @@ public class SolarUI : MonoBehaviour
 
     private void UpdateDailyEnergy()
     {
-        if (!calculateDailyEnergy)
+        if (!calculateDailyEnergy || rotateSun == null)
         {
             return;
         }
 
-        DateTime currentDateTime =
-            rotateSun.CurrentLocalDateTime;
+        DateTime currentDateTime = rotateSun.CurrentLocalDateTime;
 
-        // Recalculate only when the selected minute changes.
-        if (currentDateTime ==
-            lastCalculatedDateTime)
+        if (currentDateTime == lastCalculatedDateTime)
         {
             return;
         }
@@ -208,198 +291,100 @@ public class SolarUI : MonoBehaviour
 
     private void RecalculateDailyEnergy()
     {
-        if (!calculateDailyEnergy ||
-            rotateSun == null ||
-            raycastShading == null)
+        if (!calculateDailyEnergy || rotateSun == null || raycastShading == null)
         {
             return;
         }
 
-        DateTime selectedDateTime =
-            rotateSun.CurrentLocalDateTime;
+        DateTime selectedDateTime = rotateSun.CurrentLocalDateTime;
+        DateTime midnight = selectedDateTime.Date;
 
-        // ------------------------------------------------------------
-        // Start exactly at midnight.
-        // ------------------------------------------------------------
-
-        DateTime midnight =
-            selectedDateTime.Date;
-
-        // If it is exactly midnight, energy is exactly zero.
         if (selectedDateTime <= midnight)
         {
             accumulatedEnergyWh = 0f;
-
-            lastCalculatedDateTime =
-                selectedDateTime;
-
+            lastCalculatedDateTime = selectedDateTime;
             return;
         }
 
-        // ------------------------------------------------------------
-        // Integrate solar power from midnight to selected time.
-        // ------------------------------------------------------------
-
         double totalEnergyWh = 0.0;
+        DateTime sampleTime = midnight;
+        DateTime previousSampleTime = sampleTime;
 
-        DateTime sampleTime =
-            midnight;
+        float previousPower = CalculateEstimatedPower(previousSampleTime);
 
-        DateTime previousSampleTime =
-            sampleTime;
-
-        float previousPower =
-            CalculateEstimatedPower(
-                previousSampleTime
-            );
-
-        while (sampleTime <
-               selectedDateTime)
+        while (sampleTime < selectedDateTime)
         {
-            DateTime nextSampleTime =
-                sampleTime.AddMinutes(
-                    energyCalculationStepMinutes
-                );
+            DateTime nextSampleTime = sampleTime.AddMinutes(energyCalculationStepMinutes);
 
-            if (nextSampleTime >
-                selectedDateTime)
+            if (nextSampleTime > selectedDateTime)
             {
-                nextSampleTime =
-                    selectedDateTime;
+                nextSampleTime = selectedDateTime;
             }
 
-            float nextPower =
-                CalculateEstimatedPower(
-                    nextSampleTime
-                );
+            float nextPower = CalculateEstimatedPower(nextSampleTime);
+            double intervalHours = (nextSampleTime - previousSampleTime).TotalHours;
 
-            double intervalHours =
-                (
-                    nextSampleTime -
-                    previousSampleTime
-                ).TotalHours;
+            double averagePower = (previousPower + nextPower) / 2.0;
+            totalEnergyWh += averagePower * intervalHours;
 
-            // Trapezoidal integration.
-            double averagePower =
-                (
-                    previousPower +
-                    nextPower
-                ) / 2.0;
-
-            totalEnergyWh +=
-                averagePower *
-                intervalHours;
-
-            previousSampleTime =
-                nextSampleTime;
-
-            previousPower =
-                nextPower;
-
-            sampleTime =
-                nextSampleTime;
+            previousSampleTime = nextSampleTime;
+            previousPower = nextPower;
+            sampleTime = nextSampleTime;
         }
 
-        accumulatedEnergyWh =
-            (float)Math.Max(
-                0.0,
-                totalEnergyWh
-            );
-
-        lastCalculatedDateTime =
-            selectedDateTime;
+        accumulatedEnergyWh = (float)Math.Max(0.0, totalEnergyWh);
+        lastCalculatedDateTime = selectedDateTime;
     }
 
     // ========================================================================
     // ESTIMATE POWER AT AN ARBITRARY TIME
     // ========================================================================
 
-    private float CalculateEstimatedPower(
-        DateTime localDateTime)
+    private float CalculateEstimatedPower(DateTime localDateTime)
     {
-        Vector3 sunDirection =
-            rotateSun.GetSunDirectionAt(
-                localDateTime
-            );
+        if (rotateSun == null || raycastShading == null)
+        {
+            return 0f;
+        }
+
+        Vector3 sunDirection = rotateSun.GetSunDirectionAt(localDateTime);
 
         float elevation;
         float azimuth;
+        rotateSun.GetSolarPositionAt(localDateTime, out elevation, out azimuth);
 
-        rotateSun.GetSolarPositionAt(
-            localDateTime,
-            out elevation,
-            out azimuth
-        );
-
-        // Sun is below the horizon.
         if (elevation <= 0f)
         {
             return 0f;
         }
 
-        // ------------------------------------------------------------
-        // Check whether another object blocks the panel.
-        // ------------------------------------------------------------
-
         Vector3 rayOrigin =
             raycastShading.transform.position +
-            raycastShading.transform.up *
-            raycastShading.surfaceOffset;
+            raycastShading.transform.up * raycastShading.surfaceOffset;
 
-        bool isShaded =
-            Physics.Raycast(
-                rayOrigin,
-                sunDirection,
-                raycastShading.raycastDistance
-            );
+        bool isShaded = Physics.Raycast(
+            rayOrigin,
+            sunDirection,
+            raycastShading.raycastDistance
+        );
 
         if (isShaded)
         {
             return 0f;
         }
 
-        // ------------------------------------------------------------
-        // Calculate incidence angle.
-        // ------------------------------------------------------------
-
-        float dotProduct =
-            Vector3.Dot(
-                raycastShading.transform.up,
-                sunDirection
-            );
-
-        float intensity =
-            Mathf.Max(
-                0f,
-                dotProduct
-            );
+        float dotProduct = Vector3.Dot(raycastShading.transform.up, sunDirection);
+        float intensity = Mathf.Max(0f, dotProduct);
 
         if (intensity <= 0f)
         {
             return 0f;
         }
 
-        // ------------------------------------------------------------
-        // Calculate irradiance.
-        // ------------------------------------------------------------
+        float irradiance = raycastShading.solarIrradiance * intensity;
+        float power = irradiance * raycastShading.panelArea * raycastShading.panelEfficiency;
 
-        float irradiance =
-            raycastShading.solarIrradiance *
-            intensity;
-
-        // ------------------------------------------------------------
-        // Calculate electrical power.
-        // ------------------------------------------------------------
-
-        float power =
-            irradiance *
-            raycastShading.panelArea *
-            raycastShading.panelEfficiency;
-
-        return Mathf.Max(
-            0f,
-            power
-        );
+        return Mathf.Max(0f, power);
     }
 
     // ========================================================================
@@ -408,26 +393,24 @@ public class SolarUI : MonoBehaviour
 
     private void UpdateGraph()
     {
-        graphTimer +=
-            Time.deltaTime;
+        if (raycastShading == null)
+        {
+            return;
+        }
 
-        if (graphTimer <
-            graphUpdateInterval)
+        graphTimer += Time.deltaTime;
+
+        if (graphTimer < graphUpdateInterval)
         {
             return;
         }
 
         graphTimer = 0f;
 
-        float currentPower =
-            raycastShading.CurrentPower;
+        float currentPower = raycastShading.CurrentPower;
+        powerHistory.Add(currentPower);
 
-        powerHistory.Add(
-            currentPower
-        );
-
-        if (powerHistory.Count >
-            maxGraphPoints)
+        if (powerHistory.Count > maxGraphPoints)
         {
             powerHistory.RemoveAt(0);
         }
@@ -437,23 +420,14 @@ public class SolarUI : MonoBehaviour
 
     private void DrawGraph()
     {
-        if (graphArea == null ||
-            graphLineContainer == null)
+        if (graphArea == null || graphLineContainer == null)
         {
             return;
         }
 
-        for (
-            int i =
-                graphLineContainer.childCount - 1;
-            i >= 0;
-            i--)
+        for (int i = graphLineContainer.childCount - 1; i >= 0; i--)
         {
-            Destroy(
-                graphLineContainer
-                    .GetChild(i)
-                    .gameObject
-            );
+            Destroy(graphLineContainer.GetChild(i).gameObject);
         }
 
         if (powerHistory.Count < 2)
@@ -461,17 +435,11 @@ public class SolarUI : MonoBehaviour
             return;
         }
 
-        float width =
-            graphArea.rect.width;
-
-        float height =
-            graphArea.rect.height;
-
+        float width = graphArea.rect.width;
+        float height = graphArea.rect.height;
         float maxPower = 1f;
 
-        foreach (
-            float power
-            in powerHistory)
+        foreach (float power in powerHistory)
         {
             if (power > maxPower)
             {
@@ -479,95 +447,33 @@ public class SolarUI : MonoBehaviour
             }
         }
 
-        for (
-            int i = 0;
-            i < powerHistory.Count - 1;
-            i++)
+        for (int i = 0; i < powerHistory.Count - 1; i++)
         {
-            float x1 =
-                (float)i /
-                (powerHistory.Count - 1) *
-                width;
+            float x1 = (float)i / (powerHistory.Count - 1) * width;
+            float x2 = (float)(i + 1) / (powerHistory.Count - 1) * width;
+            float y1 = (powerHistory[i] / maxPower) * height;
+            float y2 = (powerHistory[i + 1] / maxPower) * height;
 
-            float x2 =
-                (float)(i + 1) /
-                (powerHistory.Count - 1) *
-                width;
-
-            float y1 =
-                (powerHistory[i] /
-                maxPower) *
-                height;
-
-            float y2 =
-                (powerHistory[i + 1] /
-                maxPower) *
-                height;
-
-            CreateGraphLine(
-                new Vector2(
-                    x1,
-                    y1
-                ),
-                new Vector2(
-                    x2,
-                    y2
-                )
-            );
+            CreateGraphLine(new Vector2(x1, y1), new Vector2(x2, y2));
         }
     }
 
-    private void CreateGraphLine(
-        Vector2 start,
-        Vector2 end)
+    private void CreateGraphLine(Vector2 start, Vector2 end)
     {
-        GameObject lineObject =
-            new GameObject(
-                "GraphLine"
-            );
+        GameObject lineObject = new GameObject("GraphLine");
+        lineObject.transform.SetParent(graphLineContainer, false);
 
-        lineObject.transform.SetParent(
-            graphLineContainer,
-            false
-        );
+        Image image = lineObject.AddComponent<Image>();
+        RectTransform rect = lineObject.GetComponent<RectTransform>();
 
-        Image image =
-            lineObject.AddComponent<Image>();
+        Vector2 direction = end - start;
+        float length = direction.magnitude;
+        float angle = Mathf.Atan2(direction.y, direction.x) * Mathf.Rad2Deg;
 
-        RectTransform rect =
-            lineObject.GetComponent<RectTransform>();
+        rect.sizeDelta = new Vector2(length, 3f);
+        rect.anchoredPosition = start + direction * 0.5f;
+        rect.localRotation = Quaternion.Euler(0f, 0f, angle);
 
-        Vector2 direction =
-            end - start;
-
-        float length =
-            direction.magnitude;
-
-        float angle =
-            Mathf.Atan2(
-                direction.y,
-                direction.x
-            ) *
-            Mathf.Rad2Deg;
-
-        rect.sizeDelta =
-            new Vector2(
-                length,
-                3f
-            );
-
-        rect.anchoredPosition =
-            start +
-            direction * 0.5f;
-
-        rect.localRotation =
-            Quaternion.Euler(
-                0f,
-                0f,
-                angle
-            );
-
-        image.raycastTarget =
-            false;
+        image.raycastTarget = false;
     }
 }
