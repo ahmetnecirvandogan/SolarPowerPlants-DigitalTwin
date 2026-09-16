@@ -11,6 +11,19 @@ public class RotateSun : MonoBehaviour
         Historical
     }
 
+    public bool PlayHistoricalTime
+    {
+        get => playHistoricalTime;
+        set => playHistoricalTime = value;
+    }
+
+    public float TimeScaleMultiplier
+    {
+        get => timeScaleMultiplier;
+        set => timeScaleMultiplier = value;
+    }
+
+
     [Header("Time Mode")]
     [SerializeField] private TimeMode timeMode = TimeMode.Live;
 
